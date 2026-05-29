@@ -28,7 +28,7 @@ The figures below are generated from the included training and comparison logs.
 </p>
 
 <p align="center">
-  <img src="assets/comparison_ppo_vs_cbf.png" width="70%">
+  <img src="assets/comparison_ppo_vs_cbf.png" width="50%">
 </p>
 
 The PPO-CBF-GP training and simulation results use a mismatched nominal model,
@@ -85,8 +85,7 @@ At training iteration $k$, PPO and the compensator form the augmented nominal
 input
 
 $$
-u_k^{\mathrm{aug}}(x)
-= u_k^{\mathrm{PPO}}(x)+u_k^{\mathrm{BAR}}(x),
+u_k^{\mathrm{aug}}(x) = u_k^{\mathrm{PPO}}(x)+u_k^{\mathrm{BAR}}(x),
 $$
 
 and the GP-CBF safety filter solves the residual correction QP:
@@ -116,10 +115,7 @@ f_{\mathrm{nom}}(x_t)
 The deployed control is therefore
 
 $$
-u_k(x_t)
-= u_k^{\mathrm{PPO}}(x_t)
-+ u_k^{\mathrm{BAR}}(x_t)
-+ u_k^{\mathrm{CBF}}(x_t).
+u_k(x_t) = u_k^{\mathrm{PPO}}(x_t) + u_k^{\mathrm{BAR}}(x_t) + u_k^{\mathrm{CBF}}(x_t).
 $$
 
 If the QP is feasible with zero relaxation, the original safe set is forward
