@@ -1,0 +1,12 @@
+gymnasium==0.29.1
+tyro
+tensorboard
+notebook
+ipykernel
+cvxopt
+scikit-learn
+matplotlib
+pygame
+pandas
+torch
+torchvision
