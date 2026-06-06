@@ -23,7 +23,7 @@ class Args:
     # Algorithm arguments
     env_id: str = "InvertedPendulum-v0"
     """the id of the environment"""
-    total_timesteps: int = 10000  # 300000 #500000
+    total_timesteps: int = 300000  # 500000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""

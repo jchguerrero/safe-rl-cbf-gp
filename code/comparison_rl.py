@@ -17,10 +17,7 @@ DEFAULT_CBF_LOG = (
     / "log_episodes.csv"
 )
 DEFAULT_OUTPUT_PATH = (
-    PROJECT_ROOT
-    / "results"
-    / "comparison_ppo_ppo-cbf-gp"
-    / "comparison_ppo_vs_cbf.png"
+    PROJECT_ROOT / "results" / "comparison_ppo_ppo-cbf-gp" / "comparison_ppo_vs_cbf.png"
 )
 SAFE_LIMIT_RAD = 1.0
 FIGSIZE = (13, 4)

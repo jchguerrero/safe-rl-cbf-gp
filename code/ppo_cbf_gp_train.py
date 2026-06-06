@@ -13,9 +13,14 @@ import tyro
 from src.agent import Agent
 from src.args import Args
 from src.cbf import BarrierCompensator_nn, build_barrier, control_barrier
-from src.dynamics_gp import build_GP_model, get_GP_dynamics, update_GP_dynamics
+from src.dynamics_gp import (
+    build_GP_model,
+    get_GP_dynamics,
+    gp_prediction_error,
+    update_GP_dynamics,
+)
 from src.environment import make_env, register_env
-from src.plot import plot_training
+from src.plot import plot_gp_error, plot_training
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -163,6 +168,9 @@ for iteration in range(1, args.num_iterations + 1):
         GP_model = build_GP_model(obs_size)
     timesteps_in_batch = 0
 
+    # One-step error accumulator
+    iter_errs = []
+
     ###########################################
     # Rollout and collect data
     ###########################################
@@ -236,6 +244,11 @@ for iteration in range(1, args.num_iterations + 1):
                     update_GP_dynamics(
                         GP_model, episode_obs_array, episode_action_array, obs_size
                     )
+                    errs = gp_prediction_error(
+                        GP_model, episode_obs_array, episode_action_array, obs_size
+                    )
+                    if errs is not None:
+                        iter_errs.append(errs)
 
             ep_max_angle = max(episode_theta_list) if episode_theta_list else 0.0
             ep_mean_ucbf = (
@@ -275,7 +288,7 @@ for iteration in range(1, args.num_iterations + 1):
                                 float(info["episode"]["r"].item()), 4
                             ),
                             "episode_length": int(info["episode"]["l"].item()),
-                            "max_angle_deg": round(ep_max_angle, 3),
+                            "max_angle": round(ep_max_angle, 3),
                             "safety_violations": ep_violations,
                             "mean_u_cbf": round(ep_mean_ucbf, 6),
                             "max_u_cbf": round(ep_max_ucbf, 4),
@@ -418,6 +431,15 @@ for iteration in range(1, args.num_iterations + 1):
     writer.add_scalar("safety/mean_u_cbf", mean_u_cbf_batch, global_step)
     writer.add_scalar("safety/cbf_active_frac", cbf_active_frac, global_step)
 
+    # GP prediction error
+    keys = ["nom_rmse", "gp_rmse", "nom_rmse_large", "gp_rmse_large"]
+    err_means = {
+        k: (float(np.nanmean([e[k] for e in iter_errs])) if iter_errs else np.nan)
+        for k in keys
+    }
+    for k in keys:
+        writer.add_scalar(f"gp/{k}", err_means[k], global_step)
+
     log_iters.append(
         {
             "global_step": global_step,
@@ -430,6 +452,7 @@ for iteration in range(1, args.num_iterations + 1):
             "cbf_active_frac": round(cbf_active_frac, 4),
             "explained_variance": round(explained_var, 4),
             "approx_kl": round(approx_kl.item(), 6),
+            **{k: round(err_means[k], 6) for k in keys},
         }
     )
 
@@ -480,4 +503,9 @@ plot_training(
     iters_path=csv_path_iters,
     output_path=f"runs/{run_name}/training_curves.png",
     F=1.0,
+)
+
+plot_gp_error(
+    iters_path=csv_path_iters,
+    output_path=f"runs/{run_name}/gp_error.png",
 )

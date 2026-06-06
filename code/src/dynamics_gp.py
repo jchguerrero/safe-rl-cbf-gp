@@ -58,6 +58,42 @@ def update_GP_dynamics(GP_model, X_obs, U_control, obs_size):
     GP_model[1].fit(S, err[:, 1])
 
 
+# One-step RMSE: all states and large-angle states
+def gp_prediction_error(GP_model, X_obs, U_control, obs_size, large_angle=30.0):
+    L = X_obs.shape[0]
+    if L < 2:
+        return None
+    nom = np.zeros((L - 1, obs_size - 1))
+    gp = np.zeros((L - 1, obs_size - 1))
+    theta_prev = np.zeros(L - 1)
+    for i in range(L - 1):
+        f, _, _ = get_nominal_dynamics(X_obs[i, :], U_control[i])
+        theta_p = np.arctan2(X_obs[i, 1], X_obs[i, 0])
+        theta_dot_p = X_obs[i, 2]
+        theta = np.arctan2(X_obs[i + 1, 1], X_obs[i + 1, 0])
+        theta_dot = X_obs[i + 1, 2]
+        true_next = np.array([theta, theta_dot])
+        s = np.array([theta_p, theta_dot_p]).reshape(1, -1)
+        gp_corr = np.array(
+            [GP_model[0].predict(s).flat[0], GP_model[1].predict(s).flat[0]]
+        )
+        nom[i, :] = true_next - f
+        gp[i, :] = true_next - (f + gp_corr)
+        theta_prev[i] = theta_p
+
+    large = np.abs(theta_prev) > np.radians(large_angle)
+    return {
+        "nom_rmse": float(np.sqrt((nom**2).mean())),
+        "gp_rmse": float(np.sqrt((gp**2).mean())),
+        "nom_rmse_large": (
+            float(np.sqrt((nom[large] ** 2).mean())) if large.any() else np.nan
+        ),
+        "gp_rmse_large": (
+            float(np.sqrt((gp[large] ** 2).mean())) if large.any() else np.nan
+        ),
+    }
+
+
 # GP dynamics (inference)
 def get_GP_dynamics(GP_model, obs, u_rl):
     u_rl = 0

@@ -1,9 +1,6 @@
-# Safe Deep Reinforcement Learning via Control Barrier Functions
+# Safe Deep Reinforcement Learning with CBF Safety Filtering and GP Residual Learning
 
-This repository implements a PPO-CBF-GP controller for safe inverted pendulum
-control. It combines a PPO policy, a Control Barrier Function (CBF) safety
-filter, a neural compensator, and Gaussian Process (GP) residual dynamics
-learning.
+This repository implements a PPO-CBF-GP controller for safe inverted pendulum control. The method combines a PPO policy, a neural compensator, a Control Barrier Function (CBF) safety filter, and Gaussian Process (GP) residual dynamics learning, building on [Cheng et al. (2019)](https://doi.org/10.1609/aaai.v33i01.33013387). The nominal model is mismatched on purpose, so the GP has to learn the residual dynamics online while the CBF filter keeps the policy safe. As the neural compensator learns from past barrier corrections, the policy absorbs them, so the CBF correction shrinks to zero and the safety violations fall to nearly zero. Therefore, the policy learns to stay safe on its own rather than relying on the filter.
 
 ## Framework
 
@@ -11,34 +8,27 @@ learning.
   <img src="assets/framework.png" width="90%">
 </p>
 
-The diagram summarizes the control loop. PPO proposes the nominal action, the
-compensator network learns from previous barrier corrections, and the CBF-QP
-applies the final safety correction before the action reaches the system. The GP
-model learns residual dynamics from rollouts and provides the safety filter with
-a model correction and an uncertainty estimate.
+The diagram summarizes the control loop. PPO proposes the nominal action, the compensator network learns from previous barrier corrections, and the CBF-QP applies the final safety correction before the action reaches the system. The GP model learns residual dynamics from rollouts and provides the safety filter with a model correction and an uncertainty estimate.
 
 ## Results
 
-The figures below are generated from the included training and comparison logs.
-
 <p align="center">
-  <img src="assets/return.png" width="32%">
-  <img src="assets/angle.png" width="32%">
-  <img src="assets/cbf.png" width="32%">
+  <img src="assets/training_curves.png" width="80%">
 </p>
 
+The training results above use a mismatched nominal model, so the GP has to correct the dynamics during learning. The return curve shows the policy converging, and the pendulum stays within the safe limit in about 99% of episodes, with a few brief excursions early on. The CBF correction falls off early in training as the compensator absorbs the past corrections, so the policy ends up safe with little intervention from the filter.
+
 <p align="center">
-  <img src="assets/comparison_ppo_vs_cbf.png" width="50%">
+  <img src="assets/gp_error.png" width="100%">
 </p>
 
-The PPO-CBF-GP training and simulation results use a mismatched nominal model,
-so the GP residual model has to correct the dynamics during learning.
+The curves above compare the one-step prediction RMSE of the nominal model alone against the nominal model plus the GP correction, on the states the policy visits. The left plot uses all states, the right only large-angle states above 30 degrees. The GP keeps the error low and flat in both. The gap is widest on large-angle states, which is the region the model-based CBF filter relies on most for safety.
 
-The comparison files in `results/comparison_ppo_ppo-cbf-gp/` use a separate
-setup with known dynamics. In that experiment, the nominal model used by
-PPO-CBF-GP matches the simulator dynamics so the comparison isolates the effect
-of the CBF safety filter against a standard PPO baseline trained without any
-safety filter.
+<p align="center">
+  <img src="assets/comparison_ppo_vs_cbf.png" width="100%">
+</p>
+
+The figure above comes from a separate experiment with known dynamics (logs in `results/comparison_ppo_ppo-cbf-gp/`). There the nominal model used by PPO-CBF-GP matches the simulator dynamics, so the comparison isolates the effect of the CBF safety filter against a standard PPO baseline trained without any safety filter. PPO-CBF-GP outperforms standard PPO on all three plots, reaching near-optimal return within the first few thousand steps while PPO needs more than 300k. It also stays within the safe limit in almost every episode, with very few violations. The filter keeps the policy safe during training while the compensator learns from the corrections, so the two together improve both safety and sample efficiency.
 
 ## Mathematical Framework
 
@@ -55,7 +45,7 @@ $$
 h_i(x)=F-H_i x,\qquad i=1,\dots,4,
 $$
 
-where the rows $H_i$ define the pendulum angle-velocity envelope:
+where the rows $H_i$ define the pendulum angle-velocity constraints:
 
 $$
 H_1=[1\ \lambda],\quad
@@ -246,5 +236,5 @@ python -m pre_commit run --all-files
 
 ## References
 
-- Cheng et al. repository: [rcheng805/RL-CBF](https://github.com/rcheng805/RL-CBF)
+- Cheng, R., Orosz, G., Murray, R. M., & Burdick, J. W. (2019). End-to-End Safe Reinforcement Learning through Barrier Functions for Safety-Critical Continuous Control Tasks. AAAI. [DOI](https://doi.org/10.1609/aaai.v33i01.33013387) / [code: rcheng805/RL-CBF](https://github.com/rcheng805/RL-CBF)
 - CleanRL repository: [vwxyzjn/cleanrl](https://github.com/vwxyzjn/cleanrl)

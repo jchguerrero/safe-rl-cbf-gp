@@ -1,4 +1,4 @@
-global_step,iteration,episode_return,episode_length,max_angle_deg,safety_violations,mean_u_cbf,max_u_cbf
+global_step,iteration,episode_return,episode_length,max_angle,safety_violations,mean_u_cbf,max_u_cbf
 300,1,-105.9414,300,7.314,0,13.533511,17.953
 600,1,-361.847,300,71.759,107,5.26057,17.2742
 900,1,-246.1249,300,53.46,0,3.676987,17.4176
