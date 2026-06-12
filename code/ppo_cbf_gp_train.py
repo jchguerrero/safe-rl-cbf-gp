@@ -16,6 +16,7 @@ from src.cbf import BarrierCompensator_nn, build_barrier, control_barrier
 from src.dynamics_gp import (
     build_GP_model,
     get_GP_dynamics,
+    get_nominal_dynamics,
     gp_prediction_error,
     update_GP_dynamics,
 )
@@ -51,6 +52,47 @@ def validate_and_derive_args(args: Args) -> Args:
     return args
 
 
+# Robust GP-CBF bounds for total control
+def robust_u_bounds(
+    f,
+    g,
+    x,
+    std,
+    barrier_rows,
+    safe_limit,
+    torque_bound,
+    max_speed,
+    gamma_b=0.5,
+    kd=1.5,
+):
+    lo, hi = -torque_bound, torque_bound
+
+    for h_vec in barrier_rows:
+        hg = float(np.dot(h_vec, g))
+        rhs = (
+            gamma_b * safe_limit
+            + float(np.dot(h_vec, f))
+            - (1 - gamma_b) * float(np.dot(h_vec, x))
+            - kd * abs(float(np.dot(h_vec, std)))
+        )
+        coef = -hg
+        if abs(coef) < 1e-12:
+            continue
+        if coef > 0:
+            hi = min(hi, rhs / coef)
+        else:
+            lo = max(lo, rhs / coef)
+
+    f1, g1 = float(f[1]), float(g[1])
+    if abs(g1) > 1e-12:
+        b1 = (max_speed - f1) / g1
+        b2 = (-max_speed - f1) / g1
+        hi = min(hi, max(b1, b2))
+        lo = max(lo, min(b1, b2))
+
+    return lo, hi
+
+
 # Arguments
 args = validate_and_derive_args(tyro.cli(Args))
 run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -68,6 +110,7 @@ csv_path_iters = f"runs/{run_name}/log_iters.csv"
 
 log_episodes = []
 log_iters = []
+log_controls = []
 
 # Register Environment
 register_env()
@@ -205,6 +248,19 @@ for iteration in range(1, args.num_iterations + 1):
                 GP_model_prev, prev_obs_expanded, u_RL_comp
             )
 
+        f_nom, _, _ = get_nominal_dynamics(prev_obs_expanded, 0.0)
+        gp_mu = np.asarray(f) - np.asarray(f_nom)
+        gp_interval_lo, gp_interval_hi = robust_u_bounds(
+            f,
+            g,
+            x,
+            std,
+            [H1, H2, H3, H4],
+            F,
+            torque_bound,
+            max_speed,
+        )
+
         # Apply CBF correction (filter)
         u_bar_ = control_barrier(
             u_RL_comp, f, g, x, std, P, q, H1, H2, H3, H4, F, torque_bound, max_speed
@@ -215,6 +271,28 @@ for iteration in range(1, args.num_iterations + 1):
         # Saving data for logs
         theta_now = x[0]
         omega_now = x[1]
+        log_controls.append(
+            {
+                "global_step": global_step,
+                "theta": float(theta_now),
+                "theta_dot": float(omega_now),
+                "u_ppo": u_RL,
+                "u_bar": float(u_BAR_[0, 0]),
+                "u_aug": float(u_RL_comp),
+                "u_cbf": float(u_bar_[0]),
+                "u_total": float(u_k),
+                "gp_f_theta": float(f[0]),
+                "gp_f_theta_dot": float(f[1]),
+                "gp_g_theta": float(g[0]),
+                "gp_g_theta_dot": float(g[1]),
+                "gp_mu_theta": float(gp_mu[0]),
+                "gp_mu_theta_dot": float(gp_mu[1]),
+                "gp_std_theta": float(std[0]),
+                "gp_std_theta_dot": float(std[1]),
+                "gp_interval_lo": float(gp_interval_lo),
+                "gp_interval_hi": float(gp_interval_hi),
+            }
+        )
         episode_theta_list.append(abs(np.degrees(theta_now)))
         episode_ucbf_list.append(abs(float(u_bar_[0])))
         episode_safe_list.append(int(abs(theta_now) + 0.01 * abs(omega_now) > F))
@@ -493,6 +571,7 @@ else:
 # Save logs
 pd.DataFrame(log_episodes).to_csv(csv_path_episodes, index=False)
 pd.DataFrame(log_iters).to_csv(csv_path_iters, index=False)
+pd.DataFrame(log_controls).to_csv(f"runs/{run_name}/log_controls.csv", index=False)
 print(f"Logs saved to runs/{run_name}/")
 
 envs.close()

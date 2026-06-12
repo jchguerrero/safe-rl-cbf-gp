@@ -32,17 +32,16 @@ The figure above comes from a separate experiment with known dynamics (logs in `
 
 ## Mathematical Framework
 
-The nominal pendulum model is written as a discrete-time control-affine system
-with unknown residual dynamics:
+The nominal pendulum model is written as a discrete-time control-affine system with unknown residual dynamics:
 
 $$
 x_{t+1} = f_{\mathrm{nom}}(x_t) + g_{\mathrm{nom}}u_t + d(x_t).
 $$
 
-The safety constraints are enforced through four affine barrier functions,
+The safety constraints are enforced through four affine barrier functions, using Cheng et al.'s affine convention:
 
 $$
-h_i(x)=F-H_i x,\qquad i=1,\dots,4,
+h_i(x)=F+H_i x,\qquad i=1,\dots,4,
 $$
 
 where the rows $H_i$ define the pendulum angle-velocity constraints:
@@ -54,25 +53,27 @@ H_3=[-1\ \lambda],\quad
 H_4=[-1\ -\lambda].
 $$
 
-The CBF condition is imposed for each barrier constraint to preserve the safe
-set:
+These four inequalities define the diamond-shaped safe set
+
+$$
+|\theta|+\lambda|\dot\theta|\le F.
+$$
+
+The CBF condition is imposed for each barrier constraint to preserve the safe set:
 
 $$
 h_i(x_{t+1}) \ge (1-\gamma_b)h_i(x_t), \qquad \gamma_b \in (0,1].
 $$
 
-The GP learns the one-step residual between the real transition and the nominal
-predictor:
+The GP learns the one-step residual between the real transition and the nominal predictor:
 
 $$
 \tilde d_t = x_{t+1} - \left(f_{\mathrm{nom}}(x_t)+g_{\mathrm{nom}}u_t\right),
 $$
 
-and provides a mean correction and uncertainty estimate
-$\hat d_N(x_t)$ and $\hat\sigma_N(x_t)$ for the safety filter.
+and provides a mean correction and uncertainty estimate $\hat d_N(x_t)$ and $\hat\sigma_N(x_t)$ for the safety filter.
 
-At training iteration $k$, PPO and the compensator form the augmented nominal
-input
+At training iteration $k$, PPO and the compensator form the augmented nominal input
 
 $$
 u_k^{\mathrm{aug}}(x) = u_k^{\mathrm{PPO}}(x)+u_k^{\mathrm{BAR}}(x),
@@ -87,14 +88,14 @@ and the GP-CBF safety filter solves the residual correction QP:
 \arg\min_{v,\varepsilon}
 \frac{1}{2}\|v\|^2 + K_\varepsilon \varepsilon \\
 \text{s.t.}\quad
-&F-H_i\!\left(
+&F+H_i\!\left(
 f_{\mathrm{nom}}(x_t)
 +g_{\mathrm{nom}}\left(u_k^{\mathrm{aug}}(x_t)+v\right)
 +\hat d_N(x_t)
 \right) \\
 &\quad
 -k_\delta |H_i|\hat\sigma_N(x_t)
--(1-\gamma_b)(F-H_i x_t)
+-(1-\gamma_b)(F+H_i x_t)
 \ge -\varepsilon,
 \qquad i=1,\dots,4,\\
 &u_{\min}\le u_k^{\mathrm{aug}}(x_t)+v\le u_{\max},\\
@@ -108,14 +109,14 @@ $$
 u_k(x_t) = u_k^{\mathrm{PPO}}(x_t) + u_k^{\mathrm{BAR}}(x_t) + u_k^{\mathrm{CBF}}(x_t).
 $$
 
-If the QP is feasible with zero relaxation, the original safe set is forward
-invariant with probability $1-\delta$. The compensator is trained to absorb past
-CBF corrections, so the residual online correction decreases as training
-converges.
+If the QP is feasible with zero relaxation, the original safe set is forward invariant with probability $1-\delta$. The compensator is trained to absorb past CBF corrections, so the residual online correction decreases as training converges.
 
 ## Repository Structure
 
 ```text
+cbf_visualizations.py       Paper visualization script
+log_controls.csv            Default control log used by cbf_visualizations.py
+cbf_plots/                  Generated CBF PNG figures
 code/
   ppo_cbf_gp_train.py        PPO-CBF-GP training script
   ppo_cbf_gp_simulation.py   Simulation script for a trained controller
@@ -128,8 +129,7 @@ results/                     Saved models, logs, figures, and videos
 
 ## Installation
 
-Create and activate a Python virtual environment, then install the runtime
-dependencies:
+Create and activate a Python virtual environment, then install the runtime dependencies:
 
 ```bash
 python -m pip install -r requirements.txt
@@ -168,6 +168,18 @@ Generate the PPO vs PPO-CBF-GP comparison figure:
 python code/comparison_rl.py
 ```
 
+Generate the CBF visualization figures:
+
+```bash
+python cbf_visualizations.py
+```
+
+By default, `cbf_visualizations.py` reads `log_controls.csv` from the repository root and writes PNG files to `cbf_plots/`. If the control log is stored somewhere else, pass its location explicitly:
+
+```bash
+python cbf_visualizations.py --log-controls path/to/log_controls.csv
+```
+
 ## Training From Scratch
 
 Run training with the default settings:
@@ -190,19 +202,16 @@ python code/ppo_cbf_gp_train.py --help
 
 ## Pretrained Model
 
-The included PPO-CBF-GP checkpoint comes from the mismatched dynamics
-experiment:
+The included PPO-CBF-GP checkpoint comes from the mismatched dynamics experiment:
 
 ```text
 results/trained_models/inverted_pendulum.pt
 results/trained_models/inverted_pendulum_gp.joblib
 ```
 
-Use these files with `code/ppo_cbf_gp_simulation.py` to reproduce the included
-pendulum simulation video.
+Use these files with `code/ppo_cbf_gp_simulation.py` to reproduce the included pendulum simulation video.
 
-The checkpoints inside `results/comparison_ppo_ppo-cbf-gp/` are kept separately
-because they belong to the PPO vs PPO-CBF-GP comparison experiment.
+The checkpoints inside `results/comparison_ppo_ppo-cbf-gp/` are kept separately because they belong to the PPO vs PPO-CBF-GP comparison experiment.
 
 ## Notebooks
 
