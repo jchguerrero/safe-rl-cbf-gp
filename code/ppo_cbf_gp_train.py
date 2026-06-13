@@ -13,6 +13,7 @@ import tyro
 from src.agent import Agent
 from src.args import Args
 from src.cbf import BarrierCompensator_nn, build_barrier, control_barrier
+from src.cbf_geom import SPEED_MAX, U_MAX, u_bounds
 from src.dynamics_gp import (
     build_GP_model,
     get_GP_dynamics,
@@ -50,47 +51,6 @@ def validate_and_derive_args(args: Args) -> Args:
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = int(args.total_timesteps // args.batch_size)
     return args
-
-
-# Robust GP-CBF bounds for total control
-def robust_u_bounds(
-    f,
-    g,
-    x,
-    std,
-    barrier_rows,
-    safe_limit,
-    torque_bound,
-    max_speed,
-    gamma_b=0.5,
-    kd=1.5,
-):
-    lo, hi = -torque_bound, torque_bound
-
-    for h_vec in barrier_rows:
-        hg = float(np.dot(h_vec, g))
-        rhs = (
-            gamma_b * safe_limit
-            + float(np.dot(h_vec, f))
-            - (1 - gamma_b) * float(np.dot(h_vec, x))
-            - kd * abs(float(np.dot(h_vec, std)))
-        )
-        coef = -hg
-        if abs(coef) < 1e-12:
-            continue
-        if coef > 0:
-            hi = min(hi, rhs / coef)
-        else:
-            lo = max(lo, rhs / coef)
-
-    f1, g1 = float(f[1]), float(g[1])
-    if abs(g1) > 1e-12:
-        b1 = (max_speed - f1) / g1
-        b2 = (-max_speed - f1) / g1
-        hi = min(hi, max(b1, b2))
-        lo = max(lo, min(b1, b2))
-
-    return lo, hi
 
 
 # Arguments
@@ -150,8 +110,8 @@ agent = Agent(envs).to(device)
 optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
 # CBF Parameters
-torque_bound = 15.0
-max_speed = 60.0
+torque_bound = U_MAX
+max_speed = SPEED_MAX
 action_size = int(np.prod(envs.single_action_space.shape))
 obs_size = int(np.array(envs.single_observation_space.shape).prod())
 P, q, H1, H2, H3, H4, F = build_barrier(action_size)
@@ -242,24 +202,13 @@ for iteration in range(1, args.num_iterations + 1):
 
         # Dynamics with GP included
         if firstIter:
-            [f, g, x, std] = get_GP_dynamics(GP_model, prev_obs_expanded, u_RL_comp)
+            [f, g, x, std] = get_GP_dynamics(GP_model, prev_obs_expanded)
         else:
-            [f, g, x, std] = get_GP_dynamics(
-                GP_model_prev, prev_obs_expanded, u_RL_comp
-            )
+            [f, g, x, std] = get_GP_dynamics(GP_model_prev, prev_obs_expanded)
 
         f_nom, _, _ = get_nominal_dynamics(prev_obs_expanded, 0.0)
         gp_mu = np.asarray(f) - np.asarray(f_nom)
-        gp_interval_lo, gp_interval_hi = robust_u_bounds(
-            f,
-            g,
-            x,
-            std,
-            [H1, H2, H3, H4],
-            F,
-            torque_bound,
-            max_speed,
-        )
+        gp_interval_lo, gp_interval_hi = u_bounds(f, g, x, std=std)
 
         # Apply CBF correction (filter)
         u_bar_ = control_barrier(

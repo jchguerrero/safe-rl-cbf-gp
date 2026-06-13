@@ -1,5 +1,4 @@
-import sys
-from argparse import ArgumentParser as ArgP
+from argparse import ArgumentParser
 from pathlib import Path
 
 import matplotlib
@@ -9,42 +8,26 @@ import pandas as pd
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection as Poly3D
+from src.cbf_geom import F_LIM, LAM, U_MAX, nominal_u_bounds
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent
-CODE_DIR = ROOT / "code"
-sys.path.insert(0, str(CODE_DIR / "src"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
-from dynamics_gp import get_nominal_dynamics as nom_dyn  # noqa: E402
-
-H = [
-    np.array([1, 0.01]),
-    np.array([1, -0.01]),
-    np.array([-1, 0.01]),
-    np.array([-1, -0.01]),
-]
-F = 1.0
-GAM = 0.5
-TB = 15.0
-MS = 60.0
-LAM = 0.01
-
-CG = "#2BA89B"
-SS = "#cfe8e3"
-FS = (15, 9.5)
-PSZ = (9.2, 4.2)
-PPAD = {"left": 0.10, "right": 0.70, "top": 0.88, "bottom": 0.16}
-GW = [1.45, 1]
-GWS = 0.16
-GHS = 0.30
-XL_ST = (-88, 88)
-YL_ST = (-32, 32)
-XL_U = (-88, 88)
-YL_U = (-23, 23)
-EL = 18
-AZ = -58
+C_CAGE = "#2BA89B"
+C_SAFE = "#cfe8e3"
+FIGSIZE = (15, 9.5)
+PANEL_SIZE = (9.2, 4.2)
+PANEL_PAD = {"left": 0.10, "right": 0.70, "top": 0.88, "bottom": 0.16}
+WRATIOS = [1.45, 1]
+WSPACE = 0.16
+HSPACE = 0.30
+XLIM_STATE = (-88, 88)
+YLIM_STATE = (-32, 32)
+ULIM = (-23, 23)
+ELEV = 18
+AZIM = -58
 
 L_SAFE = "state safe set"
 L_NOM_ST = "nominal admissible states"
@@ -58,33 +41,8 @@ L_K = r"training step $k$"
 L_PROP = r"proposed $u_{\mathrm{PPO}}+u_{\mathrm{BAR}}$"
 L_DEP = r"deployed $u_{\mathrm{total}}$"
 L_CORR = r"CBF projection ($u_{\mathrm{CBF}}$)"
-
-
-# Nom CBF bounds
-def u_bounds(th, td):
-    obs = np.array([np.cos(th), np.sin(th), td])
-    f, g, x = nom_dyn(obs, 0.0)
-    lo, hi = -TB, TB
-
-    for h_vec in H:
-        hg = float(np.dot(h_vec, g))
-        rhs = GAM * F + float(np.dot(h_vec, f)) - (1 - GAM) * float(np.dot(h_vec, x))
-        coef = -hg
-        if abs(coef) < 1e-12:
-            continue
-        if coef > 0:
-            hi = min(hi, rhs / coef)
-        else:
-            lo = max(lo, rhs / coef)
-
-    f1, g1 = float(f[1]), float(g[1])
-    if abs(g1) > 1e-12:
-        b1 = (MS - f1) / g1
-        b2 = (-MS - f1) / g1
-        hi = min(hi, max(b1, b2))
-        lo = max(lo, min(b1, b2))
-
-    return lo, hi
+L_SAFE_PROP = "safe proposal (without CBF projection)"
+L_GP_INT = "logged GP-CBF interval"
 
 
 # Grid CBF bounds
@@ -95,7 +53,7 @@ def grid_bounds(th, td):
 
     for i in range(th.shape[0]):
         for j in range(th.shape[1]):
-            lo, hi = u_bounds(th[i, j], td[i, j])
+            lo, hi = nominal_u_bounds(th[i, j], td[i, j])
             if hi > lo:
                 lo_g[i, j] = lo
                 hi_g[i, j] = hi
@@ -130,7 +88,7 @@ def make_grids():
     ulo = []
     uhi = []
     for x in th_line:
-        lo_i, hi_i = u_bounds(np.radians(x), 0.0)
+        lo_i, hi_i = nominal_u_bounds(np.radians(x), 0.0)
         if hi_i > lo_i:
             ulo.append(lo_i)
             uhi.append(hi_i)
@@ -172,6 +130,8 @@ def load_ctrl(path):
 
     df = df.copy()
     df["th"] = np.degrees(df.theta)
+    # raw Pendulum-v1 reward, used only for figure coloring (the agent trains
+    # on the normalized, clipped reward)
     df["reward"] = -(
         wrap_angle(df.theta.values) ** 2
         + 0.1 * df.theta_dot.values**2
@@ -196,7 +156,7 @@ def draw_cage(
         grids["thc"],
         grids["tdc"],
         grids["hic"],
-        color=CG,
+        color=C_CAGE,
         alpha=a_surf,
         linewidth=0,
         shade=False,
@@ -205,7 +165,7 @@ def draw_cage(
         grids["thc"],
         grids["tdc"],
         grids["loc"],
-        color=CG,
+        color=C_CAGE,
         alpha=a_surf,
         linewidth=0,
         shade=False,
@@ -215,18 +175,18 @@ def draw_cage(
         grids["tdc"],
         grids["mc"],
         levels=[0.5],
-        colors=CG,
+        colors=C_CAGE,
         linewidths=lw_c,
-        offset=-TB,
+        offset=-U_MAX,
     )
     ax.contour(
         grids["thc"],
         grids["tdc"],
         grids["mc"],
         levels=[0.5],
-        colors=CG,
+        colors=C_CAGE,
         linewidths=lw_c,
-        offset=TB,
+        offset=U_MAX,
     )
     for seg in grids["seg"]:
         for k in range(0, len(seg) - 1, 3):
@@ -234,9 +194,16 @@ def draw_cage(
             x1, y1 = seg[min(k + 3, len(seg) - 1)]
             ax.add_collection3d(
                 Poly3D(
-                    [[[x0, y0, -TB], [x1, y1, -TB], [x1, y1, TB], [x0, y0, TB]]],
+                    [
+                        [
+                            [x0, y0, -U_MAX],
+                            [x1, y1, -U_MAX],
+                            [x1, y1, U_MAX],
+                            [x0, y0, U_MAX],
+                        ]
+                    ],
                     alpha=a_wall,
-                    facecolor=CG,
+                    facecolor=C_CAGE,
                     edgecolor="none",
                 )
             )
@@ -255,7 +222,7 @@ def draw_cage(
                     [th[i, j], th[i, j]],
                     [td[i, j], td[i, j]],
                     [lo[i, j], hi[i, j]],
-                    color=CG,
+                    color=C_CAGE,
                     lw=0.8,
                     alpha=a_in,
                 )
@@ -266,8 +233,8 @@ def label_3d(ax):
     ax.set_xlabel(L_TH, labelpad=8)
     ax.set_ylabel(L_TD, labelpad=8)
     ax.set_zlabel(L_U, labelpad=4)
-    ax.set_zlim(*YL_U)
-    ax.view_init(EL, AZ)
+    ax.set_zlim(*ULIM)
+    ax.view_init(ELEV, AZIM)
 
 
 # Save figure as PNG
@@ -280,24 +247,24 @@ def save_png(fig, path, dpi):
 
 # Save one 2-D panel
 def save_panel(path, dpi, draw):
-    fig, ax = plt.subplots(figsize=PSZ)
-    fig.subplots_adjust(**PPAD)
+    fig, ax = plt.subplots(figsize=PANEL_SIZE)
+    fig.subplots_adjust(**PANEL_PAD)
     draw(ax)
     save_png(fig, path, dpi)
 
 
 # Draw state regions
 def draw_st_bg(ax, grids):
-    th = np.linspace(XL_ST[0], XL_ST[1], 400)
+    th = np.linspace(XLIM_STATE[0], XLIM_STATE[1], 400)
     thr = np.radians(th)
-    w = (F - np.abs(thr)) / LAM
+    w = (F_LIM - np.abs(thr)) / LAM
     ok = w >= 0
     ax.fill_between(
         th,
         -w,
         w,
         where=ok,
-        color=SS,
+        color=C_SAFE,
         alpha=0.65,
     )
     ax.contourf(
@@ -305,7 +272,7 @@ def draw_st_bg(ax, grids):
         grids["td"],
         grids["m"],
         levels=[0.5, 1.5],
-        colors=[CG],
+        colors=[C_CAGE],
         alpha=0.38,
     )
 
@@ -313,9 +280,9 @@ def draw_st_bg(ax, grids):
 # State legend handles
 def st_h():
     return [
-        Patch(facecolor=SS, edgecolor="none", alpha=0.65, label=L_SAFE),
+        Patch(facecolor=C_SAFE, edgecolor="none", alpha=0.65, label=L_SAFE),
         Patch(
-            facecolor=CG,
+            facecolor=C_CAGE,
             edgecolor="none",
             alpha=0.38,
             label=L_NOM_ST,
@@ -326,7 +293,7 @@ def st_h():
 # Control legend handle
 def u_h():
     return Patch(
-        facecolor=CG,
+        facecolor=C_CAGE,
         edgecolor="none",
         alpha=0.22,
         label=L_NOM_U,
@@ -375,8 +342,8 @@ def fit_lim(*vals, base, span0, padf=0.10):
 
 
 # Bin control traces
-def time_data(df, k_zoom, bin, win):
-    grp = df.groupby(df.global_step // bin)
+def time_data(df, k_zoom, bin_size, win):
+    grp = df.groupby(df.global_step // bin_size)
     avg = grp.agg(
         step=("global_step", "mean"),
         prop=("prop", "mean"),
@@ -419,30 +386,30 @@ def plot_rl(df, grids, path, skip, dpi, cby):
 
     xl = fit_lim(
         smp.th,
-        base=XL_ST,
+        base=XLIM_STATE,
         span0=120,
         padf=0.08,
     )
     yl = fit_lim(
         smp.theta_dot,
-        base=YL_ST,
+        base=YLIM_STATE,
         span0=10,
         padf=0.18,
     )
     yu = fit_lim(
         smp.u_total,
-        base=YL_U,
+        base=ULIM,
         span0=22,
         padf=0.10,
     )
 
-    fig = plt.figure(figsize=FS)
+    fig = plt.figure(figsize=FIGSIZE)
     gs = gridspec.GridSpec(
         2,
         2,
-        width_ratios=GW,
-        wspace=GWS,
-        hspace=GHS,
+        width_ratios=WRATIOS,
+        wspace=WSPACE,
+        hspace=HSPACE,
     )
 
     ax = fig.add_subplot(gs[:, 0], projection="3d")
@@ -462,7 +429,7 @@ def plot_rl(df, grids, path, skip, dpi, cby):
     ax.set_title(r"3-D: ($\theta$, $\dot{\theta}$, $u$)", fontsize=12)
     ax.legend(
         handles=[
-            Line2D([0], [0], color=CG, lw=2, label=L_NOM3),
+            Line2D([0], [0], color=C_CAGE, lw=2, label=L_NOM3),
             dot_h(L_DEP),
         ],
         fontsize=9,
@@ -499,7 +466,7 @@ def plot_rl(df, grids, path, skip, dpi, cby):
         grids["th_line"],
         grids["ulo"],
         grids["uhi"],
-        color=CG,
+        color=C_CAGE,
         alpha=0.22,
     )
     ax_u.scatter(
@@ -535,10 +502,10 @@ def plot_time(
     ax,
     df,
     k_zoom,
-    bin,
+    bin_size,
     win,
 ):
-    avg, up, ud, title = time_data(df, k_zoom, bin, win)
+    avg, up, ud, title = time_data(df, k_zoom, bin_size, win)
 
     corr = ax.fill_between(
         avg.step,
@@ -587,19 +554,26 @@ def proj_cases(df, gp=False):
     use_gp = gp and gp_cols(df)
     mod = df[df.proj.abs() > 0.3]
     rows = []
+    n_wide = 0
     for _, row in mod.iterrows():
         if use_gp:
             lo, hi = float(row.gp_interval_lo), float(row.gp_interval_hi)
         else:
-            lo, hi = u_bounds(row.theta, row.theta_dot)
-        if hi < lo or (hi - lo) >= 2 * TB - 0.5:
+            lo, hi = nominal_u_bounds(row.theta, row.theta_dot)
+        if hi < lo:
+            continue
+        if (hi - lo) >= 2 * U_MAX - 0.5:
+            # skip projections whose interval spans almost the full torque
+            # range (constraint inactive); count reported by plot_proj
+            n_wide += 1
             continue
         prop_out = row.prop < lo - 1e-6 or row.prop > hi + 1e-6
         dep_in = lo - 0.3 <= row.u_total <= hi + 0.3
         if prop_out and dep_in:
             rows.append((row.th, row.theta_dot, row.prop, row.u_total, lo, hi))
 
-    return pd.DataFrame(rows, columns=["th", "td", "prop", "dep", "lo", "hi"])
+    cases = pd.DataFrame(rows, columns=["th", "td", "prop", "dep", "lo", "hi"])
+    return cases, n_wide
 
 
 # Samples needing no CBF
@@ -619,7 +593,7 @@ def safe_cases(
         if use_gp:
             lo, hi = float(row.gp_interval_lo), float(row.gp_interval_hi)
         else:
-            lo, hi = u_bounds(row.theta, row.theta_dot)
+            lo, hi = nominal_u_bounds(row.theta, row.theta_dot)
         if hi < lo:
             continue
         prop_in = lo - 1e-6 <= row.prop <= hi + 1e-6
@@ -676,7 +650,7 @@ def plot_state2d(
         c=c_safe,
         marker="D",
         alpha=0.80,
-        label="safe proposal (without CBF projection)",
+        label=L_SAFE_PROP,
     )
     ax.set_xlabel(L_TH)
     ax.set_ylabel(L_TD)
@@ -709,7 +683,7 @@ def plot_state2d(
                 marker="D",
                 color="w",
                 markerfacecolor=c_safe,
-                label="safe proposal (without CBF projection)",
+                label=L_SAFE_PROP,
             ),
         ],
         fontsize=7.5,
@@ -738,7 +712,7 @@ def plot_u2d(
         grids["th_line"],
         grids["ulo"],
         grids["uhi"],
-        color=CG,
+        color=C_CAGE,
         alpha=0.22,
     )
     for _, row in act.iterrows():
@@ -798,7 +772,7 @@ def plot_u2d(
 
     hs = [u_h()]
     if use_gp:
-        hs.append(Line2D([0], [0], color=c_int, lw=3, label="logged GP-CBF interval"))
+        hs.append(Line2D([0], [0], color=c_int, lw=3, label=L_GP_INT))
     hs.extend(
         [
             Line2D(
@@ -823,7 +797,7 @@ def plot_u2d(
                 marker="D",
                 color="w",
                 markerfacecolor=c_safe,
-                label="safe proposal (without CBF projection)",
+                label=L_SAFE_PROP,
             ),
         ]
     )
@@ -857,7 +831,7 @@ def plot_proj(ctrl, grids, args):
     c_safe = "#6A3D9A"
     use_gp = gp_cols(ctrl)
 
-    act = proj_cases(ctrl, gp=True)
+    act, n_wide = proj_cases(ctrl, gp=True)
     act, n_proj = thin(act, args.n_proj)
     safe = safe_cases(
         ctrl,
@@ -867,12 +841,23 @@ def plot_proj(ctrl, grids, args):
     )
     safe, n_safe = thin(safe, args.n_safe)
 
+    yu = fit_lim(
+        act.prop,
+        act.dep,
+        act.lo,
+        act.hi,
+        safe.dep,
+        base=(-U_MAX - 8, U_MAX + 8),
+        span0=22,
+        padf=0.10,
+    )
+
     fig_3d = plt.figure(figsize=(10.5, 8.4))
     ax = fig_3d.add_subplot(111, projection="3d")
     draw_cage(ax, grids)
 
     for _, row in act.iterrows():
-        up = np.clip(row.prop, -22, 22)
+        up = row.prop
         if use_gp:
             ax.plot(
                 [row.th, row.th],
@@ -894,7 +879,7 @@ def plot_proj(ctrl, grids, args):
     ax.scatter(
         act.th,
         act.td,
-        np.clip(act.prop, -22, 22),
+        act.prop,
         s=18,
         c=c_prop,
         marker="^",
@@ -921,10 +906,10 @@ def plot_proj(ctrl, grids, args):
     ax.set_xlabel(L_TH, labelpad=8)
     ax.set_ylabel(L_TD, labelpad=8)
     ax.set_zlabel(L_U, labelpad=4)
-    ax.set_zlim(*YL_U)
-    ax.view_init(EL, AZ)
+    ax.set_zlim(*yu)
+    ax.view_init(ELEV, AZIM)
     hs = [
-        Line2D([0], [0], color=CG, lw=2, label=L_NOM3),
+        Line2D([0], [0], color=C_CAGE, lw=2, label=L_NOM3),
     ]
     if use_gp:
         hs.append(
@@ -934,7 +919,7 @@ def plot_proj(ctrl, grids, args):
                 color=c_int,
                 lw=3,
                 alpha=0.85,
-                label="logged GP-CBF interval",
+                label=L_GP_INT,
             )
         )
     hs.extend(
@@ -968,7 +953,7 @@ def plot_proj(ctrl, grids, args):
                 marker="D",
                 color="w",
                 markerfacecolor=c_safe,
-                label="safe proposal (without CBF projection)",
+                label=L_SAFE_PROP,
             ),
         ]
     )
@@ -994,28 +979,17 @@ def plot_proj(ctrl, grids, args):
     xl = fit_lim(
         act.th,
         safe.th,
-        base=XL_ST,
+        base=XLIM_STATE,
         span0=120,
         padf=0.08,
     )
     yl = fit_lim(
         act.td,
         safe.td,
-        base=YL_ST,
+        base=YLIM_STATE,
         span0=10,
         padf=0.18,
     )
-    yu = fit_lim(
-        act.prop,
-        act.dep,
-        act.lo,
-        act.hi,
-        safe.dep,
-        base=YL_U,
-        span0=22,
-        padf=0.10,
-    )
-
     paths = panels(out / "projection2d.png")
 
     def draw_state(ax):
@@ -1052,7 +1026,7 @@ def plot_proj(ctrl, grids, args):
             ax,
             ctrl,
             args.k_zoom,
-            args.bin,
+            args.bin_size,
             args.win,
         )
         ax.set_xlabel(L_K)
@@ -1062,26 +1036,27 @@ def plot_proj(ctrl, grids, args):
     save_panel(paths["timeseries"], dpi, draw_time)
 
     print(
-        f"projection3d plotted projs: {len(act)} of {n_proj}; "
+        f"projection3d plotted projs: {len(act)} of {n_proj} "
+        f"({n_wide} excluded with near-full-range intervals); "
         f"no-CBF: {len(safe)} of {n_safe}"
     )
 
 
 # Command-line options
 def parse_args():
-    p = ArgP(description="Generate CBF/RL figures from log_controls.csv.")
+    p = ArgumentParser(description="Generate CBF/RL figures from log_controls.csv.")
     p.add_argument(
         "--log-controls",
         dest="log",
         type=Path,
-        default=ROOT / "log_controls.csv",
-        help="Path to the per-step control CSV.",
+        default=REPO_ROOT / "log_controls.csv",
+        help="Path to the per-step control CSV (default: log_controls.csv at the repo root).",
     )
     p.add_argument(
         "--output-dir",
         dest="out",
         type=Path,
-        default=ROOT / "cbf_plots",
+        default=REPO_ROOT / "cbf_plots",
         help="Directory where PNG figures will be saved.",
     )
     p.add_argument(
@@ -1128,7 +1103,7 @@ def parse_args():
     )
     p.add_argument(
         "--control-bin-size",
-        dest="bin",
+        dest="bin_size",
         type=int,
         default=200,
         help="Steps per time bin.",
@@ -1172,12 +1147,15 @@ def main():
         raise ValueError("--projection3d-safe-min-step must be non-negative")
     if args.k_zoom < 0:
         raise ValueError("--control-zoom-steps must be non-negative")
-    if args.bin <= 0:
+    if args.bin_size <= 0:
         raise ValueError("--control-bin-size must be > 0")
     if args.win <= 0:
         raise ValueError("--control-smooth-window must be > 0")
     if not args.log.exists():
-        raise FileNotFoundError(f"log_controls CSV not found: {args.log}")
+        raise FileNotFoundError(
+            f"control log not found: {args.log}. Run code/ppo_cbf_gp_train.py "
+            "to produce log_controls.csv, or pass --log-controls explicitly."
+        )
 
     selected = set(args.figs)
     if "all" in selected:

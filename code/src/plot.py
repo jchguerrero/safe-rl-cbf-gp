@@ -46,7 +46,7 @@ def plot_training(episodes_path, iters_path, output_path=None, F=1.0):
     if output_path:
         fig.savefig(output_path, bbox_inches="tight")
         print(f"Saved to {output_path}")
-    plt.show()
+    plt.close(fig)
 
 
 # One-step RMSE: all states and large-angle states
@@ -73,4 +73,4 @@ def plot_gp_error(iters_path, output_path=None):
     if output_path:
         fig.savefig(output_path, bbox_inches="tight")
         print(f"Saved to {output_path}")
-    plt.show()
+    plt.close(fig)

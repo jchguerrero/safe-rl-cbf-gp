@@ -3,31 +3,13 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF
 from sklearn.gaussian_process.kernels import ConstantKernel as C
 
+from src.cbf_geom import nominal_dynamics
+
 
 # Nominal dynamics (inaccurate model)
 def get_nominal_dynamics(obs, u_rl):
-    dt = 0.05
-    G = 10
-    m = 2
-    length = 2
-    obs = np.squeeze(obs)
-    theta = np.arctan2(obs[1], obs[0])
-    theta_dot = obs[2]
-    f = np.array(
-        [
-            -3 * G / (2 * length) * np.sin(theta + np.pi) * dt**2
-            + theta_dot * dt
-            + theta
-            + 3 / (m * length**2) * u_rl * dt**2,
-            theta_dot
-            - 3 * G / (2 * length) * np.sin(theta + np.pi) * dt
-            + 3 / (m * length**2) * u_rl * dt,
-        ]
-    )
-    g = np.array([3 / (m * length**2) * dt**2, 3 / (m * length**2) * dt])
-
-    x = np.array([theta, theta_dot])
-    return [np.squeeze(f), np.squeeze(g), np.squeeze(x)]
+    f, g, x = nominal_dynamics(obs, u_rl)
+    return [f, g, x]
 
 
 # GP Model
@@ -95,29 +77,9 @@ def gp_prediction_error(GP_model, X_obs, U_control, obs_size, large_angle=30.0):
 
 
 # GP dynamics (inference)
-def get_GP_dynamics(GP_model, obs, u_rl):
-    u_rl = 0
-    dt = 0.05
-    G = 10
-    m = 2
-    length = 2
-    obs = np.squeeze(obs)
-    theta = np.arctan2(obs[1], obs[0])
-    theta_dot = obs[2]
-    x = np.array([theta, theta_dot])
-    f_nom = np.array(
-        [
-            -3 * G / (2 * length) * np.sin(theta + np.pi) * dt**2
-            + theta_dot * dt
-            + theta
-            + 3 / (m * length**2) * u_rl * dt**2,
-            theta_dot
-            - 3 * G / (2 * length) * np.sin(theta + np.pi) * dt
-            + 3 / (m * length**2) * u_rl * dt,
-        ]
-    )
-    g = np.array([3 / (m * length**2) * dt**2, 3 / (m * length**2) * dt])
-    f_nom = np.squeeze(f_nom)
+def get_GP_dynamics(GP_model, obs):
+    # drift only (u = 0); control enters through g, not f
+    f_nom, g, x = nominal_dynamics(obs, 0.0)
     f = np.zeros(2)
     [m1, std1] = GP_model[0].predict(x.reshape(1, -1), return_std=True)
     [m2, std2] = GP_model[1].predict(x.reshape(1, -1), return_std=True)

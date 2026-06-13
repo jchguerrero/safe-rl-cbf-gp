@@ -1,3 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safe-rl-cbf-gp"
+version = "0.1.0"
+description = "PPO with a GP-robust control barrier function safety filter on an inverted pendulum"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+package-dir = {"" = "code"}
+packages = ["src"]
+
 [tool.black]
 line-length = 88
 target-version = ["py310"]

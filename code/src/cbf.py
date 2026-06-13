@@ -1,18 +1,19 @@
+import warnings
+
 import numpy as np
 import torch
 import torch.nn as nn
 from cvxopt import matrix, solvers
+
+from src.cbf_geom import F_LIM, GAMMA, H_ROWS, KD
 
 
 # Barrier function model
 def build_barrier(action_size):
     P = matrix(np.diag([1.0, 1e16]), tc="d")
     q = matrix(np.zeros(action_size + 1))
-    H1 = np.array([1, 0.01])
-    H2 = np.array([1, -0.01])
-    H3 = np.array([-1, 0.01])
-    H4 = np.array([-1, -0.01])
-    F = 1
+    H1, H2, H3, H4 = H_ROWS
+    F = F_LIM
     return P, q, H1, H2, H3, H4, F
 
 
@@ -20,8 +21,8 @@ def build_barrier(action_size):
 def control_barrier(
     u_rl, f, g, x, std, P, q, H1, H2, H3, H4, F, torque_bound, max_speed
 ):
-    gamma_b = 0.5
-    kd = 1.5
+    gamma_b = GAMMA
+    kd = KD
 
     # Set up QP to satisfy CBF
     G = np.array(
@@ -79,10 +80,14 @@ def control_barrier(
 
     if np.add(np.squeeze(u_rl), np.squeeze(u_bar[0])) - 0.001 >= torque_bound:
         u_bar[0] = torque_bound - u_rl
-        print("Error in QP")
+        warnings.warn(
+            "QP solution exceeded the torque bound; clamping u_bar", stacklevel=2
+        )
     elif np.add(np.squeeze(u_rl), np.squeeze(u_bar[0])) + 0.001 <= -torque_bound:
         u_bar[0] = -torque_bound - u_rl
-        print("Error in QP")
+        warnings.warn(
+            "QP solution exceeded the torque bound; clamping u_bar", stacklevel=2
+        )
     else:
         pass
 

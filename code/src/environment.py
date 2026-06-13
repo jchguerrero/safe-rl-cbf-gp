@@ -17,15 +17,22 @@ class InvertedPendulumEnv(gym.Wrapper):
         self.action_space = self.unwrapped.action_space
         self.observation_space = self.unwrapped.observation_space
 
+    MAX_RESET_RETRIES = 100
+
     def reset(self, **kwargs):
-        while True:
-            obs, info = self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
+        # seed only the first draw; later draws continue the same RNG stream
+        kwargs.pop("seed", None)
+        for _ in range(self.MAX_RESET_RETRIES):
             if abs(self.unwrapped.state[0]) <= 1.0:
                 return obs, info
-            kwargs.pop("seed", None)
+            obs, info = self.env.reset(**kwargs)
+        raise RuntimeError(
+            f"reset rejection sampling failed after {self.MAX_RESET_RETRIES} draws"
+        )
 
 
-# Rigister Environment
+# Register Environment
 def register_env():
     if "InvertedPendulum-v0" not in gym.envs.registry:
         gym.register(

@@ -114,14 +114,14 @@ If the QP is feasible with zero relaxation, the original safe set is forward inv
 ## Repository Structure
 
 ```text
-cbf_visualizations.py       Paper visualization script
-log_controls.csv            Default control log used by cbf_visualizations.py
 cbf_plots/                  Generated CBF PNG figures
 code/
   ppo_cbf_gp_train.py        PPO-CBF-GP training script
   ppo_cbf_gp_simulation.py   Simulation script for a trained controller
   comparison_rl.py           PPO vs PPO-CBF-GP comparison plot
+  cbf_visualizations.py      Paper visualization script
   src/                       Agent, environment, CBF, GP, args, and plotting helpers
+  src/cbf_geom.py            Model constants and CBF bound algebra
   notebooks/                 Standalone reference notebooks
 assets/                      README figures
 results/                     Saved models, logs, figures, and videos
@@ -133,7 +133,10 @@ Create and activate a Python virtual environment, then install the runtime depen
 
 ```bash
 python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
+
+The second line installs the project so that `import src...` resolves from anywhere in the repository.
 
 For development tools:
 
@@ -171,13 +174,19 @@ python code/comparison_rl.py
 Generate the CBF visualization figures:
 
 ```bash
-python cbf_visualizations.py
+python code/cbf_visualizations.py
 ```
 
-By default, `cbf_visualizations.py` reads `log_controls.csv` from the repository root and writes PNG files to `cbf_plots/`. If the control log is stored somewhere else, pass its location explicitly:
+By default, `code/cbf_visualizations.py` reads `log_controls.csv` from the repository root and writes PNG files to `cbf_plots/`. The log is produced by training (`code/ppo_cbf_gp_train.py` saves it under `runs/<run_name>/`); copy that file to the repository root, or point the script at it:
 
 ```bash
-python cbf_visualizations.py --log-controls path/to/log_controls.csv
+python code/cbf_visualizations.py --log-controls runs/<run_name>/log_controls.csv
+```
+
+Verify that the figure bounds and the controller bounds are the same algebra (the check that guards the constraint-form sign):
+
+```bash
+python code/src/cbf_geom.py
 ```
 
 ## Training From Scratch

@@ -155,7 +155,7 @@ def main():
 
         # Control: RL+CBF+GP
         u_rl_comp = u_rl + u_bar_nn
-        f, g, x, std = get_GP_dynamics(gp_model, obs_np, u_rl_comp)
+        f, g, x, std = get_GP_dynamics(gp_model, obs_np)
         u_bar = control_barrier(
             u_rl_comp,
             f,
