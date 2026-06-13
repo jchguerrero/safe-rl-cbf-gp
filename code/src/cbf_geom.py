@@ -13,7 +13,7 @@ LENGTH = 2.0
 U_MAX = 15.0
 SPEED_MAX = 60.0
 
-# Safe set: |theta + LAM * theta_dot| <= F_LIM, encoded by four half-planes
+# Safe set: |theta| + LAM * |theta_dot| <= F_LIM, encoded by four half-planes
 LAM = 0.01
 F_LIM = 1.0
 H_ROWS = (

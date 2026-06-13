@@ -119,7 +119,8 @@ code/
   ppo_cbf_gp_train.py        PPO-CBF-GP training script
   ppo_cbf_gp_simulation.py   Simulation script for a trained controller
   comparison_rl.py           PPO vs PPO-CBF-GP comparison plot
-  cbf_visualizations.py      Paper visualization script
+  cbf_visualizations.py      Paper visualization script (reads log_controls.csv)
+  safe_set_figures.py        Theoretical safe-set figures (nominal, no data needed)
   src/                       Agent, environment, CBF, GP, args, and plotting helpers
   src/cbf_geom.py            Model constants and CBF bound algebra
   notebooks/                 Standalone reference notebooks
@@ -181,6 +182,12 @@ By default, `code/cbf_visualizations.py` reads `log_controls.csv` from the repos
 
 ```bash
 python code/cbf_visualizations.py --log-controls runs/<run_name>/log_controls.csv
+```
+
+Generate the theoretical safe-set figures (the safe state set and the nominal K_cbf width). These are pure geometry and need no log or training:
+
+```bash
+python code/safe_set_figures.py
 ```
 
 Verify that the figure bounds and the controller bounds are the same algebra (the check that guards the constraint-form sign):
